@@ -5,7 +5,6 @@ so driver.py works unchanged against either.
 """
 from typing import List, Dict, Any, Optional
 
-
 class SnowflakeConfigLoader:
     def __init__(self, session, config_table_fqn: str):
         self.session = session
