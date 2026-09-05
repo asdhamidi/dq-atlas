@@ -1,0 +1,5 @@
+# Demo mode (main.py --demo) uses only the Python standard library —
+# nothing in this file is required to run it.
+#
+# Production mode (against real Snowflake) needs the connector:
+snowflake-connector-python>=3.0.0

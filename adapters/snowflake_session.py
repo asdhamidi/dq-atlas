@@ -1,0 +1,47 @@
+"""
+Production adapter. One Snowflake session per worker thread -- the
+Snowflake connector's cursor/connection objects are not safe to share
+across concurrently-running threads. Import of snowflake.connector is
+lazy so the rest of the framework can be imported and demoed without the
+dependency installed.
+"""
+import os
+import threading
+
+
+class SnowflakeSession:
+    def __init__(self, connection_params: dict = None):
+        self._local = threading.local()
+        self._connection_params = connection_params or self._from_env()
+
+    @staticmethod
+    def _from_env() -> dict:
+        return dict(
+            account=os.environ["SNOWFLAKE_ACCOUNT"],
+            user=os.environ["SNOWFLAKE_USER"],
+            password=os.environ.get("SNOWFLAKE_PASSWORD"),
+            private_key=os.environ.get("SNOWFLAKE_PRIVATE_KEY"),
+            role=os.environ.get("SNOWFLAKE_ROLE"),
+            warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE"),
+            database=os.environ.get("SNOWFLAKE_DATABASE"),
+        )
+
+    def get_connection(self):
+        if not hasattr(self._local, "conn"):
+            import snowflake.connector  # lazy import -- not a hard dependency for demo mode
+            self._local.conn = snowflake.connector.connect(**self._connection_params)
+        return self._local.conn
+
+    def execute(self, connection, sql: str):
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            columns = [c[0] for c in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+
+    def close_all(self):
+        if hasattr(self._local, "conn"):
+            self._local.conn.close()
+            del self._local.conn
