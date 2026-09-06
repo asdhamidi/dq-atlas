@@ -1,11 +1,20 @@
 """
-Loads DQ_CHECK_CONFIG rows. In production this queries Snowflake directly;
-in demo mode it filters an in-memory list. Both satisfy ConfigLoaderPort,
-so driver.py works unchanged against either.
+Loads DQ_CHECK_CONFIG rows via a generic SQL query executed through
+whatever SessionPort it's given. In production that's a real database
+(Snowflake, SQLite, whatever build_session() constructed); in demo mode
+it's swapped for DemoConfigLoader, which filters an in-memory list
+instead. Both satisfy ConfigLoaderPort, so driver.py works unchanged
+against either.
+
+Named generically (not "Snowflake...") because there's nothing
+warehouse-specific in the query below -- plain ANSI SELECT/WHERE. It
+works against SQLite, Postgres, or anything else a SessionPort wraps.
 """
+
 from typing import List, Dict, Any, Optional
 
-class SnowflakeConfigLoader:
+
+class SqlConfigLoader:
     def __init__(self, session, config_table_fqn: str):
         self.session = session
         self.config_table_fqn = config_table_fqn
@@ -18,7 +27,9 @@ class SnowflakeConfigLoader:
         run_all: bool = False,
     ) -> List[Dict[str, Any]]:
         if not (check_id or table_name or schedule_group or run_all):
-            raise ValueError("Specify check_id, table_name, schedule_group, or run_all=True")
+            raise ValueError(
+                "Specify check_id, table_name, schedule_group, or run_all=True"
+            )
 
         where = ["CHECK_STATUS IN ('ACTIVE', 'SHADOW')"]
         if check_id:
@@ -44,7 +55,11 @@ class DemoConfigLoader:
         schedule_group: Optional[str] = None,
         run_all: bool = False,
     ) -> List[Dict[str, Any]]:
-        rows = [r for r in self._rows if r.get("CHECK_STATUS", "ACTIVE") in ("ACTIVE", "SHADOW")]
+        rows = [
+            r
+            for r in self._rows
+            if r.get("CHECK_STATUS", "ACTIVE") in ("ACTIVE", "SHADOW")
+        ]
         if check_id:
             rows = [r for r in rows if r["CHECK_ID"] == check_id]
         elif table_name:
@@ -52,5 +67,7 @@ class DemoConfigLoader:
         elif schedule_group:
             rows = [r for r in rows if r.get("SCHEDULE_GROUP") == schedule_group]
         elif not run_all:
-            raise ValueError("Specify check_id, table_name, schedule_group, or run_all=True")
+            raise ValueError(
+                "Specify check_id, table_name, schedule_group, or run_all=True"
+            )
         return rows

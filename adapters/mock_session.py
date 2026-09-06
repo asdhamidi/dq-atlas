@@ -1,12 +1,15 @@
 """
-Demo/testing adapter -- satisfies SessionPort without a real Snowflake
+Demo/testing adapter -- satisfies SessionPort without any real database
 connection. Returns plausible, deterministic-per-SQL pseudo-random results
 so a demo run exercises the full driver/registry/logging pipeline end to
-end. This does NOT validate real data -- swap in SnowflakeSession for that.
+end. This does NOT validate real data -- pick a real backend for that.
 """
+
 import hashlib
 import random
 import threading
+
+from adapters.session_registry import register_session
 
 
 class MockSession:
@@ -21,7 +24,7 @@ class MockSession:
         return self._local.conn
 
     def execute(self, connection, sql: str):
-        seed = int(hashlib.md5(sql.encode()).hexdigest(), 16) % (2 ** 32)
+        seed = int(hashlib.md5(sql.encode()).hexdigest(), 16) % (2**32)
         rng = random.Random(seed)
         upper = sql.upper()
 
@@ -30,11 +33,17 @@ class MockSession:
 
         if "LIMIT" in upper and "GROUP BY" in upper and "HAVING" in upper:
             # detail-fetch style query for duplicates -- return a couple sample rows
-            return [{"SAMPLE_KEY": rng.randint(1000, 9999), "OCCURRENCE_COUNT": 2} for _ in range(rng.randint(1, 3))]
+            return [
+                {"SAMPLE_KEY": rng.randint(1000, 9999), "OCCURRENCE_COUNT": 2}
+                for _ in range(rng.randint(1, 3))
+            ]
 
         if "LIMIT" in upper:
             # any other detail-fetch query (row-level WHERE ... LIMIT n)
-            return [{"SAMPLE_KEY": rng.randint(1000, 9999)} for _ in range(rng.randint(1, 5))]
+            return [
+                {"SAMPLE_KEY": rng.randint(1000, 9999)}
+                for _ in range(rng.randint(1, 5))
+            ]
 
         if "TOTAL_ROWS" not in upper and "FAILED_ROWS" not in upper:
             # scalar query, e.g. a RECON-style "SELECT COUNT(*) FROM ..."
@@ -43,3 +52,8 @@ class MockSession:
         total = rng.randint(5000, 50000)
         failed = rng.randint(0, int(total * 0.03))
         return [{"TOTAL_ROWS": total, "FAILED_ROWS": failed}]
+
+
+@register_session("mock")
+def _build_mock_session():
+    return MockSession()

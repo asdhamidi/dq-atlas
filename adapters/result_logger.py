@@ -1,9 +1,14 @@
 """
 ResultLogger adapters. Batches all results from a run into a single insert
 rather than one round trip per check -- matters once a run covers 50-200+
-checks. Demo mode writes CSV files instead of Snowflake so output is
-inspectable without a warehouse.
+checks. Demo mode writes CSV files instead so output is inspectable
+without any database at all.
+
+SqlResultLogger is named generically because its SQL is plain ANSI
+INSERT ... VALUES -- nothing Snowflake-specific -- so it works against
+whatever SessionPort it's handed.
 """
+
 import csv
 import os
 import json
@@ -13,7 +18,7 @@ from core.models import CheckResult, RunSummary
 from core.sql_render import safe_literal
 
 
-class SnowflakeResultLogger:
+class SqlResultLogger:
     def __init__(self, session, results_table_fqn: str, run_log_table_fqn: str):
         self.session = session
         self.results_table_fqn = results_table_fqn
@@ -29,8 +34,7 @@ class SnowflakeResultLogger:
             "(RUN_ID, CHECK_ID, CHECK_TYPE, STATUS, TOTAL_ROWS, FAILED_ROWS, FAIL_PCT, "
             "THRESHOLD_TYPE, THRESHOLD_VALUE, PASS_FAIL_FLAG, CRITICALITY, "
             "CHECK_STATUS_AT_RUN, RENDERED_SQL, SAMPLE_FAILED_KEYS, ERROR_MESSAGE, "
-            "EXECUTION_TIME_MS, EXECUTED_AT) VALUES "
-            + ", ".join(value_clauses)
+            "EXECUTION_TIME_MS, EXECUTED_AT) VALUES " + ", ".join(value_clauses)
         )
         self.session.execute(conn, sql)
 
@@ -38,12 +42,23 @@ class SnowflakeResultLogger:
     def _result_to_values_clause(r: CheckResult) -> str:
         sample = json.dumps(r.sample_failed_keys) if r.sample_failed_keys else None
         vals = [
-            safe_literal(r.run_id), safe_literal(r.check_id), safe_literal(r.check_type),
-            safe_literal(r.status), safe_literal(r.total_rows), safe_literal(r.failed_rows),
-            safe_literal(r.fail_pct), safe_literal(r.threshold_type), safe_literal(r.threshold_value),
-            safe_literal(r.pass_fail_flag), safe_literal(r.criticality), safe_literal(r.check_status_at_run),
-            safe_literal(r.rendered_sql), safe_literal(sample), safe_literal(r.error_message),
-            safe_literal(r.execution_time_ms), safe_literal(r.executed_at.isoformat()),
+            safe_literal(r.run_id),
+            safe_literal(r.check_id),
+            safe_literal(r.check_type),
+            safe_literal(r.status),
+            safe_literal(r.total_rows),
+            safe_literal(r.failed_rows),
+            safe_literal(r.fail_pct),
+            safe_literal(r.threshold_type),
+            safe_literal(r.threshold_value),
+            safe_literal(r.pass_fail_flag),
+            safe_literal(r.criticality),
+            safe_literal(r.check_status_at_run),
+            safe_literal(r.rendered_sql),
+            safe_literal(sample),
+            safe_literal(r.error_message),
+            safe_literal(r.execution_time_ms),
+            safe_literal(r.executed_at.isoformat()),
         ]
         return f"({', '.join(vals)})"
 

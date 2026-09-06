@@ -5,8 +5,11 @@ across concurrently-running threads. Import of snowflake.connector is
 lazy so the rest of the framework can be imported and demoed without the
 dependency installed.
 """
+
 import os
 import threading
+
+from adapters.session_registry import register_session
 
 
 class SnowflakeSession:
@@ -29,6 +32,7 @@ class SnowflakeSession:
     def get_connection(self):
         if not hasattr(self._local, "conn"):
             import snowflake.connector  # lazy import -- not a hard dependency for demo mode
+
             self._local.conn = snowflake.connector.connect(**self._connection_params)
         return self._local.conn
 
@@ -45,3 +49,8 @@ class SnowflakeSession:
         if hasattr(self._local, "conn"):
             self._local.conn.close()
             del self._local.conn
+
+
+@register_session("snowflake")
+def _build_snowflake_session():
+    return SnowflakeSession()
