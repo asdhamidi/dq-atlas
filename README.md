@@ -343,6 +343,40 @@ Demo results are written to:
 
 ---
 
+## Running the tests
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+No Snowflake connection is required. The suite covers:
+
+* `core/` in isolation -- SQL rendering/escaping, threshold evaluation,
+  range predicates, the aggregate-check helper's error paths.
+* `core/registry.py` -- every check-family resolution branch, multi-check
+  rows, and required-field validation.
+* `core/driver.py` -- the full orchestration pipeline against fake ports
+  (`tests/conftest.py`), including error isolation for both a malformed
+  config row and a failing check execution, detail-fetch gating, and
+  concurrent vs. sequential equivalence.
+* Every module in `checks/`, driven directly against a scriptable fake
+  session (`tests/conftest.FakeSession`).
+* `adapters/config_loader.py`, `adapters/record_fetcher.py`,
+  `adapters/result_logger.py`, `adapters/session_registry.py`.
+* `adapters/sqlite_session.py` end to end against a real (temporary)
+  SQLite database -- config loading, execution, and result logging all
+  actually hit disk, not fakes.
+* `adapters/snowflake_session.py`'s private-key conversion (skipped
+  automatically if `cryptography` isn't installed) and env-var wiring.
+  `snowflake.connector` itself is never imported by the test suite --
+  consistent with it being a lazy, optional dependency.
+* `main.py` as a subprocess, running the real CLI (`--demo --run-all`,
+  `--sequential`, `--table`, and the no-scope-flag error path) and
+  checking the actual CSV files it writes.
+
+---
+
 ## Running against Snowflake
 
 ### 1. Create the metadata and results tables
@@ -421,10 +455,14 @@ export SNOWFLAKE_DATABASE=...
 For key-pair authentication, use:
 
 ```bash
-export SNOWFLAKE_PRIVATE_KEY=...
+export SNOWFLAKE_PRIVATE_KEY=...        # PEM contents, e.g. $(cat rsa_key.p8)
+export SNOWFLAKE_PRIVATE_KEY_PASSPHRASE=...   # optional, if the key is encrypted
 ```
 
-instead of password authentication as supported by the adapter.
+instead of `SNOWFLAKE_PASSWORD`. This requires the `cryptography` package
+(`pip install cryptography`, or `pip install -r requirements.txt`) --
+the adapter converts the PEM into the DER/PKCS8 bytes the Snowflake
+connector expects.
 
 ---
 

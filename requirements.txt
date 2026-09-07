@@ -3,3 +3,12 @@
 #
 # Production mode (against real Snowflake) needs the connector:
 snowflake-connector-python>=3.0.0
+
+# Only needed if authenticating via SNOWFLAKE_PRIVATE_KEY (key-pair auth)
+# instead of SNOWFLAKE_PASSWORD -- converts the PEM key into the DER/PKCS8
+# bytes the connector expects. See adapters/snowflake_session.py.
+cryptography>=41.0.0
+
+# Test suite (pytest run against demo/mock + sqlite backends -- no
+# Snowflake connection required):
+pytest>=8.0.0

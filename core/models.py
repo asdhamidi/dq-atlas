@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+from core.sql_render import safe_fq_name
+
 
 @dataclass
 class CheckInstance:
@@ -38,7 +40,11 @@ class CheckInstance:
 
     @property
     def fq_table(self) -> str:
-        return f"{self.database}.{self.schema}.{self.table}"
+        # Validated/quoted via safe_fq_name rather than raw-interpolated --
+        # DATABASE_NAME/SCHEMA_NAME/TABLE_NAME are admin-edited config, but
+        # so is every column name, and those already go through
+        # safe_identifier. This closes that inconsistency.
+        return safe_fq_name(f"{self.database}.{self.schema}.{self.table}")
 
 
 @dataclass

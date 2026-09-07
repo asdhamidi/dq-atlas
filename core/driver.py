@@ -54,12 +54,30 @@ class DQDriver:
             schedule_group=schedule_group, run_all=run_all,
         )
         instances: List[CheckInstance] = []
+        resolution_errors: List[CheckResult] = []
         for row in config_rows:
-            instances.extend(resolve_check_instances(row))
+            # A malformed row (missing a required field, wrong type for a
+            # list-typed field, etc.) must not abort the whole batch -- it
+            # should surface as one ERROR result for that row, the same
+            # isolation guarantee execution failures already get below.
+            try:
+                instances.extend(resolve_check_instances(row))
+            except Exception as e:
+                check_id = row.get("CHECK_ID", "UNKNOWN")
+                logger.exception(
+                    "Failed to resolve check instance(s) for CHECK_ID=%s", check_id
+                )
+                resolution_errors.append(CheckResult(
+                    run_id=run_id,
+                    check_id=str(check_id),
+                    check_type="UNRESOLVED",
+                    status="ERROR",
+                    error_message=f"Config row resolution failed: {e}",
+                ))
 
         logger.info(
-            "Run %s: resolved %d check instance(s) from %d config row(s)",
-            run_id, len(instances), len(config_rows),
+            "Run %s: resolved %d check instance(s) from %d config row(s) (%d resolution error(s))",
+            run_id, len(instances), len(config_rows), len(resolution_errors),
         )
 
         # 2 & 3. dispatch + execute
@@ -67,6 +85,7 @@ class DQDriver:
             results = self._execute_concurrent(instances, run_id)
         else:
             results = [self._execute_one(inst, run_id) for inst in instances]
+        results = resolution_errors + results
 
         # 4. detail fetch -- only for checks that actually failed, sequential
         #    since it's low volume by construction (only failing checks).

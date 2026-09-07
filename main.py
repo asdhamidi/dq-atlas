@@ -134,14 +134,22 @@ def main():
         max_workers=args.max_workers,
     )
 
-    summary = driver.run(
-        check_id=args.check_id,
-        table_name=args.table,
-        schedule_group=args.schedule_group,
-        run_all=args.run_all,
-        concurrent=not args.sequential,
-        detail_limit=args.detail_limit,
-    )
+    try:
+        summary = driver.run(
+            check_id=args.check_id,
+            table_name=args.table,
+            schedule_group=args.schedule_group,
+            run_all=args.run_all,
+            concurrent=not args.sequential,
+            detail_limit=args.detail_limit,
+        )
+    finally:
+        # Release every per-worker-thread connection the session opened.
+        # A custom third-party adapter that doesn't implement close_all
+        # is tolerated (getattr default) rather than required.
+        close_all = getattr(session, "close_all", None)
+        if close_all:
+            close_all()
 
     print(
         f"\nBackend: {db_type} (available: {', '.join(sorted(SESSION_REGISTRY.keys()))})"

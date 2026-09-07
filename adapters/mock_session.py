@@ -53,6 +53,12 @@ class MockSession:
         failed = rng.randint(0, int(total * 0.03))
         return [{"TOTAL_ROWS": total, "FAILED_ROWS": failed}]
 
+    def close_all(self):
+        """No real resources to release -- present so callers can treat
+        every SessionPort implementation the same way at shutdown."""
+        if hasattr(self._local, "conn"):
+            del self._local.conn
+
 
 @register_session("mock")
 def _build_mock_session():

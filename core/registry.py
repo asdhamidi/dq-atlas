@@ -21,7 +21,34 @@ def register(check_type: str):
     return wrapper
 
 
+_REQUIRED_BASE_FIELDS = ("CHECK_ID", "DATABASE_NAME", "SCHEMA_NAME", "TABLE_NAME")
+
+
+def _require(row: dict, key: str, check_type: str):
+    """
+    Looks up a required field and raises a clear, actionable error if it's
+    missing -- instead of leaving a bare KeyError to propagate. The driver
+    catches whatever this raises and turns it into a per-row ERROR result
+    (see DQDriver.run), so a malformed row no longer needs to name every
+    exception type it might throw; it just needs to fail with a message
+    that says which field, on which check_id, for which check type.
+    """
+    value = row.get(key)
+    if value in (None, ""):
+        raise ValueError(
+            f"{check_type} check requires '{key}' to be set "
+            f"(CHECK_ID={row.get('CHECK_ID', '<missing>')!r})"
+        )
+    return value
+
+
 def _base_kwargs(row: dict) -> dict:
+    missing = [f for f in _REQUIRED_BASE_FIELDS if row.get(f) in (None, "")]
+    if missing:
+        raise ValueError(
+            f"Config row missing required field(s): {', '.join(missing)} "
+            f"(CHECK_ID={row.get('CHECK_ID', '<missing>')!r})"
+        )
     return dict(
         check_id=row["CHECK_ID"],
         database=row["DATABASE_NAME"],
@@ -46,7 +73,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="NULL",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "NULL"),
             threshold_type=row.get("NULL_THRESHOLD_TYPE", "COUNT"),
             threshold_value=row.get("NULL_THRESHOLD", 0),
         ))
@@ -64,7 +91,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="RANGE",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "RANGE"),
             params={"lower_bound": row.get("LOWER_BOUND"), "upper_bound": row.get("UPPER_BOUND")},
             threshold_type=row.get("RANGE_THRESHOLD_TYPE", "PERCENT"),
             threshold_value=row.get("RANGE_THRESHOLD", 0),
@@ -74,7 +101,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="TYPE",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "TYPE"),
             params={"regex_pattern": row["REGEX_PATTERN"]},
             threshold_type=row.get("TYPE_THRESHOLD_TYPE", "PERCENT"),
             threshold_value=row.get("TYPE_THRESHOLD", 0),
@@ -84,7 +111,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="DATA_TYPE",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "DATA_TYPE"),
             params={"expected_data_type": row["EXPECTED_DATA_TYPE"]},
             threshold_type="COUNT",
             threshold_value=0,
@@ -94,7 +121,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="CHECKLIST",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "CHECKLIST"),
             params={"allowed_values": row["ALLOWED_VALUES"]},
             threshold_type=row.get("CHECKLIST_THRESHOLD_TYPE", "PERCENT"),
             threshold_value=row.get("CHECKLIST_THRESHOLD", 0),
@@ -108,7 +135,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type=method,
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", method),
             params={"sensitivity": row["OUTLIER_SENSITIVITY"]},
             threshold_type=row.get("OUTLIER_THRESHOLD_TYPE", "PERCENT"),
             threshold_value=row.get("OUTLIER_THRESHOLD", 0),
@@ -118,10 +145,10 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
         instances.append(CheckInstance(
             **_base_kwargs(row),
             check_type="REF",
-            column=row["COLUMN_NAME"],
+            column=_require(row, "COLUMN_NAME", "REF"),
             params={
                 "reference_table": row["REFERENCE_TABLE"],
-                "reference_column": row["REFERENCE_COLUMN"],
+                "reference_column": _require(row, "REFERENCE_COLUMN", "REF"),
             },
             threshold_type=row.get("REF_THRESHOLD_TYPE", "COUNT"),
             threshold_value=row.get("REF_THRESHOLD", 0),
@@ -133,7 +160,7 @@ def resolve_check_instances(row: dict) -> List[CheckInstance]:
             check_type="RECON",
             params={
                 "source_sql": row["RECON_SOURCE_SQL"],
-                "target_sql": row["RECON_TARGET_SQL"],
+                "target_sql": _require(row, "RECON_TARGET_SQL", "RECON"),
             },
             threshold_type="PERCENT",
             threshold_value=row.get("RECON_TOLERANCE_PCT", 0),

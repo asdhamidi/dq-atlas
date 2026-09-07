@@ -20,6 +20,12 @@ class SessionPort(Protocol):
         """Runs a SQL statement and returns rows as a list of dicts."""
         ...
 
+    def close_all(self) -> None:
+        """Releases every per-thread connection this session opened.
+        Called once by the CLI after a run completes. Every built-in
+        adapter (Snowflake, SQLite, mock) implements this."""
+        ...
+
 
 class ResultLoggerPort(Protocol):
     def log_results(self, results: list) -> None:

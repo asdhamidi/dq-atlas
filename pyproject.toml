@@ -1,10 +1,29 @@
 [project]
 name = "dq-framework"
 version = "0.1.0"
-description = "Add your description here"
+description = "Config-driven data quality engine (ports-and-adapters)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "mypy>=2.3.1",
-    "snowflake>=1.13.1",
 ]
+
+# Demo mode (--demo) and the sqlite backend use only the standard library.
+# Real backends pull in their own driver only when selected -- see
+# adapters/snowflake_session.py's lazy import of snowflake.connector.
+[project.optional-dependencies]
+snowflake = [
+    "snowflake-connector-python>=3.0.0",
+    # Needed to convert SNOWFLAKE_PRIVATE_KEY (PEM) into the DER/PKCS8
+    # bytes the connector's key-pair auth expects.
+    "cryptography>=41.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

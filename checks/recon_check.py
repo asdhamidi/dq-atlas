@@ -29,7 +29,17 @@ def run(instance, session, run_id):
 
     source_val = list(source_rows[0].values())[0]
     target_val = list(target_rows[0].values())[0]
-    diff_pct = abs(source_val - target_val) / source_val * 100 if source_val else 0.0
+    # abs() must wrap the whole ratio, not just the numerator -- otherwise
+    # a negative source_val (e.g. RECON over a signed SUM, not just
+    # COUNT(*)) can flip the sign of diff_pct and produce a false PASS
+    # against a positive threshold regardless of how large the mismatch
+    # actually is. A zero source_val is handled explicitly: any nonzero
+    # target against a zero source is a total mismatch (100%), not the
+    # "no data yet" 0.0 the old fallback silently reported.
+    if source_val == 0:
+        diff_pct = 0.0 if target_val == 0 else 100.0
+    else:
+        diff_pct = abs(source_val - target_val) / abs(source_val) * 100
 
     total_rows, failed_rows = 1, (1 if diff_pct > instance.threshold_value else 0)
 

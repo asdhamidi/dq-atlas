@@ -18,16 +18,46 @@ class SnowflakeSession:
         self._connection_params = connection_params or self._from_env()
 
     @staticmethod
-    def _from_env() -> dict:
-        return dict(
+    def _load_private_key(pem_value, passphrase: str = None) -> bytes:
+        """
+        Converts a PEM-formatted private key (the natural shape for
+        SNOWFLAKE_PRIVATE_KEY -- the literal contents of a .p8 file) into
+        the DER-encoded PKCS8 bytes snowflake.connector.connect(...)
+        actually expects for its `private_key` parameter. Passing the raw
+        PEM string through unconverted -- the previous behavior -- looks
+        plausible but fails against the real connector.
+        """
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.backends import default_backend
+
+        pem_bytes = pem_value.encode() if isinstance(pem_value, str) else pem_value
+        password = passphrase.encode() if passphrase else None
+        p_key = serialization.load_pem_private_key(
+            pem_bytes, password=password, backend=default_backend()
+        )
+        return p_key.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
+    @classmethod
+    def _from_env(cls) -> dict:
+        params = dict(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
-            password=os.environ.get("SNOWFLAKE_PASSWORD"),
-            private_key=os.environ.get("SNOWFLAKE_PRIVATE_KEY"),
             role=os.environ.get("SNOWFLAKE_ROLE"),
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE"),
             database=os.environ.get("SNOWFLAKE_DATABASE"),
         )
+        private_key_pem = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+        if private_key_pem:
+            params["private_key"] = cls._load_private_key(
+                private_key_pem, os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
+            )
+        else:
+            params["password"] = os.environ.get("SNOWFLAKE_PASSWORD")
+        return params
 
     def get_connection(self):
         if not hasattr(self._local, "conn"):

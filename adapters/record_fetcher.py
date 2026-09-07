@@ -5,7 +5,7 @@ Kept separate from the check functions so the common case (aggregate check,
 zero failures) never pays for a second query.
 """
 from typing import Optional, List, Dict, Any
-from core.sql_render import render, safe_identifier_list, safe_identifier, safe_literal, safe_literal_list
+from core.sql_render import render, safe_identifier_list, safe_identifier, safe_literal, safe_literal_list, safe_fq_name
 from core.predicates import build_range_predicate
 from templates.default_templates import DEFAULT_TEMPLATES
 
@@ -59,7 +59,7 @@ class RecordFetcher:
         elif instance.check_type == "OUTLIER_ZSCORE":
             ctx["sensitivity"] = safe_literal(p["sensitivity"])
         elif instance.check_type == "REF":
-            ctx["reference_table"] = p["reference_table"]
+            ctx["reference_table"] = safe_fq_name(p["reference_table"])
             ctx["reference_column"] = safe_identifier(p["reference_column"])
 
         return ctx

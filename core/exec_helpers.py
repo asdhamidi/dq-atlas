@@ -23,8 +23,29 @@ def execute_aggregate_check(instance: CheckInstance, session, run_id: str, sql: 
         raise CheckExecutionError(str(e), rendered_sql=sql, original=e)
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
-    total = rows[0]["TOTAL_ROWS"] if rows else 0
-    failed = rows[0]["FAILED_ROWS"] if rows else 0
+    # An aggregate check is expected to produce exactly one row. Most
+    # templates guarantee this via COUNT(*), which always returns a row
+    # even against an empty table -- but a metadata-lookup style check
+    # (e.g. DATA_TYPE, filtered against INFORMATION_SCHEMA.COLUMNS) can
+    # legitimately return zero rows if its target no longer exists. That
+    # must not be silently treated as FAILED_ROWS=0 / PASS: a schema-drift
+    # check whose column got renamed or dropped is exactly the case it
+    # exists to catch, so it needs to fail loudly instead of failing open.
+    if not rows:
+        raise CheckExecutionError(
+            "Aggregate query returned zero rows (expected exactly one row "
+            "with TOTAL_ROWS/FAILED_ROWS) -- the check's target table/column "
+            "may no longer exist.",
+            rendered_sql=sql,
+        )
+    try:
+        total = rows[0]["TOTAL_ROWS"]
+        failed = rows[0]["FAILED_ROWS"]
+    except KeyError as e:
+        raise CheckExecutionError(
+            f"Aggregate query result is missing expected column: {e}",
+            rendered_sql=sql,
+        )
     fail_pct = compute_fail_pct(total, failed)
 
     return CheckResult(
