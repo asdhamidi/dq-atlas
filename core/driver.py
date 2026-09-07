@@ -63,13 +63,16 @@ class DQDriver:
             try:
                 instances.extend(resolve_check_instances(row))
             except Exception as e:
-                check_id = row.get("CHECK_ID", "UNKNOWN")
+                # Named row_check_id, not check_id -- check_id is this
+                # method's own parameter (the --check-id filter); reusing
+                # that name here would shadow it for the rest of run().
+                row_check_id = row.get("CHECK_ID", "UNKNOWN")
                 logger.exception(
-                    "Failed to resolve check instance(s) for CHECK_ID=%s", check_id
+                    "Failed to resolve check instance(s) for CHECK_ID=%s", row_check_id
                 )
                 resolution_errors.append(CheckResult(
                     run_id=run_id,
-                    check_id=str(check_id),
+                    check_id=str(row_check_id),
                     check_type="UNRESOLVED",
                     status="ERROR",
                     error_message=f"Config row resolution failed: {e}",
