@@ -20,4 +20,5 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        # Run pylint on tracked Python files but exclude files in the top-level 'test/' folder
+        git ls-files '*.py' | grep -v '^test/' | xargs -r pylint
